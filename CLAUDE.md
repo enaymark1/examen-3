@@ -51,6 +51,7 @@ ID,condition
 | `01_baseline_lgbm.csv` | 0,8417 | 0,83814 |
 | `02_vendedor_titulo.csv` | 0,9376 | 0,93809 |
 | `03_fotos_vendedor_texto.csv` | 0,9423 | 0,94457 |
+| `04_lgbm_xgb_texto_v4.csv` | 0,9433 | **0,94466** |
 
 ## Resultados hasta ahora
 
@@ -66,9 +67,14 @@ ID,condition
 | + fotos (tamaño, proporción, mes de subida) | 0,9388 |
 | + fotos, otros campos y perfil del vendedor | 0,9399 |
 | + texto combinado (título + garantía + atributos), en lugar del título | 0,9416 |
-| + hiperparámetros (1500 árboles, lr 0,02, colsample 0,5) | **0,9423** |
+| + hiperparámetros (1500 árboles, lr 0,02, colsample 0,5) | 0,9423 |
+| XGBoost solo / CatBoost solo | 0,9428 / 0,9414 |
+| Promedio LightGBM + XGBoost | 0,9429 |
+| Texto v4 (palabras + caracteres) + promedio LightGBM + XGBoost | **0,9433** (mejora en 5/5 particiones) |
 
 Probado y descartado en el 03: target encoding de la ciudad, TF-IDF de caracteres del título, modelo de texto solo de la garantía (ninguno mejora más que el ruido).
+
+Probado y descartado en el 04: CatBoost (más lento, no suma al promedio), texto con tokens estructurados (el texto solo sube a 0,906 pero el modelo baja a 0,9415: repite info que ya está en columnas), `C=2` / `C=8`, ajustar el umbral (+0,0002, ruido). También se miró: títulos repetidos train/test (1,5%) y `parent_item_id` (no apunta a train): no vale la pena.
 
 ## Decisiones del notebook 02
 
@@ -79,7 +85,7 @@ Probado y descartado en el 03: target encoding de la ciudad, TF-IDF de caractere
 - Categóricas de LightGBM: alinear las categorías de validación/test con las de entrenamiento (`alinear_categorias`).
 - Todo con `random_state=42` para que sea reproducible.
 
-## Decisiones del notebook 03 (`03_fotos_vendedor_texto.ipynb`, modelo actual)
+## Decisiones del notebook 03 (`03_fotos_vendedor_texto.ipynb`)
 
 - Features nuevas sobre train + test (no usan la respuesta): fotos (`features_fotos`), otros campos (`features_otros`), perfil del vendedor (`features_vendedor`). `status` pasa a ser categórica. Total: 92 columnas + 3 piezas.
 - Fotos: 4:3 (celular) → usado; cuadradas (catálogo) → nuevo. El `id` de la foto termina en `_MMAAAA` (mes de subida).
@@ -90,11 +96,21 @@ Probado y descartado en el 03: target encoding de la ciudad, TF-IDF de caractere
 - Importancia (gain): `prob_combinado` 29%, `te_seller_id` 20%, `listing_type_id` 9%, `initial_quantity` 6%; las 20 primeras suman 87%.
 - El notebook tarda ~37 min en correr entero (15 min las piezas).
 
+## Decisiones del notebook 04 (`04_modelos_ensamble.ipynb`, modelo actual)
+
+- Las funciones de features están en **`features.py`** (verificado: reproduce exacto el CSV 03). Notebooks desde el 04 y `train.py` / `predict.py` importan de ahí.
+- Texto v4: `calcular_piezas(..., caracteres=True)` → TF-IDF de palabras (1-2) + caracteres `char_wb` (3-5, min_df=5, 200.000 máx.) unidos, `LogisticRegression(C=4)`.
+- Modelo final: promedio de probabilidades de LightGBM (`PARAMS_LGBM`, los del 03) y XGBoost (`n_estimators=1500, learning_rate=0.02, max_depth=8, subsample=0.8, colsample_bytree=0.5, min_child_weight=2, tree_method="hist", enable_categorical=True, random_state=42, n_jobs=8`). Umbral 0,5.
+- Los 3 modelos coinciden en 98,5–99% de los ítems (correlación ~0,995): con estas features el algoritmo importa poco.
+- **Limitación principal:** vendedores con 1 solo ítem (25% de los datos) tienen error 11,2% vs 2,1% en vendedores con más de 50; juntan casi la mitad de los errores.
+- La 04 cambia 318 predicciones respecto de la 03. Kaggle: +0,00009, o sea, prácticamente igual. Estamos en una meseta de ~0,943–0,945.
+- El notebook tarda ~90 min. CatBoost deja una carpeta `catboost_info/` (está en `.gitignore`).
+- Notebooks largos: que la compu no se suspenda (apagar la pantalla no importa).
+
 ## Próximos pasos
 
-1. Probar otros modelos (por ejemplo CatBoost o XGBoost, no están instalados) y, si conviene, combinarlos.
-2. Armar `train.py` y `predict.py` limpios y verificar que reproducen exactamente la última submission.
-3. Presentación.
+1. Armar `train.py` y `predict.py` limpios y verificar que reproducen exactamente la última submission.
+2. Presentación.
 
 ## Cómo trabajar con Ezequiel
 
