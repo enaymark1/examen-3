@@ -50,7 +50,7 @@ ID,condition
 |---|---|---|
 | `01_baseline_lgbm.csv` | 0,8417 | 0,83814 |
 | `02_vendedor_titulo.csv` | 0,9376 | 0,93809 |
-| `03_fotos_vendedor_texto.csv` | 0,9423 | (pendiente) |
+| `03_fotos_vendedor_texto.csv` | 0,9423 | 0,94457 |
 
 ## Resultados hasta ahora
 
@@ -92,10 +92,9 @@ Probado y descartado en el 03: target encoding de la ciudad, TF-IDF de caractere
 
 ## Próximos pasos
 
-1. Mandar `03_fotos_vendedor_texto.csv` a Kaggle y anotar el score.
-2. Probar otros modelos (por ejemplo CatBoost o XGBoost, no están instalados) y, si conviene, combinarlos.
-3. Armar `train.py` y `predict.py` limpios y verificar que reproducen exactamente la última submission.
-4. Presentación.
+1. Probar otros modelos (por ejemplo CatBoost o XGBoost, no están instalados) y, si conviene, combinarlos.
+2. Armar `train.py` y `predict.py` limpios y verificar que reproducen exactamente la última submission.
+3. Presentación.
 
 ## Cómo trabajar con Ezequiel
 
