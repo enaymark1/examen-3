@@ -229,16 +229,32 @@ def prob_texto(textos_train, y_train, textos_test, caracteres=False):
     return p_train, p_test
 
 
-def calcular_piezas(todo, y, idx_a, idx_b, caracteres=False):
-    """Target encoding de vendedor y categoría + probabilidad del texto combinado.
+def claves_cruzadas(todo):
+    """Claves para los target encodings cruzados (notebook 05)."""
+    vendedor, categoria = todo["seller_id"].astype(str), todo["category_id"].astype(str)
+    palabra1 = todo["title"].fillna("").str.lower().str.extract(r"([a-záéíóúñ]+)", expand=False).fillna("")
+    return {
+        "te_vend_cat": vendedor + "|" + categoria,                    # el vendedor en esa categoría
+        "te_vend_tipo": vendedor + "|" + todo["listing_type_id"],     # el vendedor con ese tipo de publicación
+        "te_cat_palabra1": categoria + "|" + palabra1,                # "tipo de producto": categoría + primera palabra
+    }
+
+
+def calcular_piezas(todo, y, idx_a, idx_b, caracteres=False, cruzados=False):
+    """Target encoding de vendedor y categoría + probabilidad del texto combinado
+    (+ los 3 target encodings cruzados si cruzados=True).
     idx_a: filas de entrenamiento, idx_b: filas a predecir (posiciones en `todo`)."""
     texto = texto_combinado(todo)
     sub = lambda s, idx: s.iloc[idx].reset_index(drop=True)
-    return {
+    piezas = {
         "te_seller_id": target_encoding(sub(todo["seller_id"], idx_a), y[idx_a], sub(todo["seller_id"], idx_b)),
         "te_category_id": target_encoding(sub(todo["category_id"], idx_a), y[idx_a], sub(todo["category_id"], idx_b)),
         "prob_combinado": prob_texto(sub(texto, idx_a), y[idx_a], sub(texto, idx_b), caracteres),
     }
+    if cruzados:
+        for nombre, clave in claves_cruzadas(todo).items():
+            piezas[nombre] = target_encoding(sub(clave, idx_a), y[idx_a], sub(clave, idx_b))
+    return piezas
 
 
 def alinear_categorias(A, B):
