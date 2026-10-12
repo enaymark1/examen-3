@@ -51,7 +51,8 @@ ID,condition
 | `01_baseline_lgbm.csv` | 0,8417 | 0,83814 |
 | `02_vendedor_titulo.csv` | 0,9376 | 0,93809 |
 | `03_fotos_vendedor_texto.csv` | 0,9423 | 0,94457 |
-| `04_lgbm_xgb_texto_v4.csv` | 0,9433 | **0,94466** |
+| `04_lgbm_xgb_texto_v4.csv` | 0,9433 | 0,94466 |
+| `05_encodings_cruzados.csv` | 0,9443 | **0,94590** |
 
 ## Resultados hasta ahora
 
@@ -70,7 +71,8 @@ ID,condition
 | + hiperparámetros (1500 árboles, lr 0,02, colsample 0,5) | 0,9423 |
 | XGBoost solo / CatBoost solo | 0,9428 / 0,9414 |
 | Promedio LightGBM + XGBoost | 0,9429 |
-| Texto v4 (palabras + caracteres) + promedio LightGBM + XGBoost | **0,9433** (mejora en 5/5 particiones) |
+| Texto v4 (palabras + caracteres) + promedio LightGBM + XGBoost | 0,9433 (mejora en 5/5 particiones) |
+| + 3 target encodings cruzados (vendedor×tipo, vendedor×categoría, categoría×primera palabra) | **0,9443** (5/5) |
 
 Probado y descartado en el 03: target encoding de la ciudad, TF-IDF de caracteres del título, modelo de texto solo de la garantía (ninguno mejora más que el ruido).
 
@@ -96,7 +98,7 @@ Probado y descartado en el 04: CatBoost (más lento, no suma al promedio), texto
 - Importancia (gain): `prob_combinado` 29%, `te_seller_id` 20%, `listing_type_id` 9%, `initial_quantity` 6%; las 20 primeras suman 87%.
 - El notebook tarda ~37 min en correr entero (15 min las piezas).
 
-## Decisiones del notebook 04 (`04_modelos_ensamble.ipynb`, modelo actual)
+## Decisiones del notebook 04 (`04_modelos_ensamble.ipynb`)
 
 - Las funciones de features están en **`features.py`** (verificado: reproduce exacto el CSV 03). Notebooks desde el 04 y `train.py` / `predict.py` importan de ahí.
 - Texto v4: `calcular_piezas(..., caracteres=True)` → TF-IDF de palabras (1-2) + caracteres `char_wb` (3-5, min_df=5, 200.000 máx.) unidos, `LogisticRegression(C=4)`.
@@ -107,10 +109,21 @@ Probado y descartado en el 04: CatBoost (más lento, no suma al promedio), texto
 - El notebook tarda ~90 min. CatBoost deja una carpeta `catboost_info/` (está en `.gitignore`).
 - Notebooks largos: que la compu no se suspenda (apagar la pantalla no importa).
 
+## Decisiones del notebook 05 (`05_errores_encodings.ipynb`, modelo actual)
+
+- **Análisis de errores:** 35% de los errores son "seguros" (p < 0,15 o > 0,85) y muchos son ruido de etiqueta (la condición la declara el vendedor: libros "Usado" marcados nuevos, ebooks marcados usados...). Pone un techo a la accuracy.
+- **Lo único que funcionó:** 3 target encodings cruzados, `features.claves_cruzadas` → `calcular_piezas(..., caracteres=True, cruzados=True)`. Vendedor × tipo es el que más suma solo (+0,0008); los 3 juntos +0,0010–0,0013 en 5/5. Interpretación: un vendedor tiene varios "modos" (gold = mercadería del negocio, free = cosas propias usadas).
+- **Descartado (todo dentro del ruido):** perfil del vendedor con predicciones del texto; vecinos por título (10 más parecidos de otros vendedores); otros 7 cruces de TE; suavizado 3 / 30; formato de ids de fotos; descripción de otro ítem; título editado (link ≠ título); lotes vendedor × día/semana; suavizado por vendedor con predicciones de validación + test; modelo lineal texto + one-hot de vendedor (solo da 0,924; como feature o promediado no suma); 6 variantes de hiperparámetros.
+- Orden de las filas e `id` del ítem: al azar, sin señal.
+- Modelo final 05: igual que el 04 + los 3 encodings (98 columnas), promedio LightGBM + XGBoost. LightGBM solo da lo mismo (0,9444).
+- El notebook tarda ~95 min. Con 7,7 GB de RAM, cerrar otros programas antes de correrlo.
+- Leaderboard público al 12/10: 1º 0,94880, 2º 0,94842, 3º 0,94733, 4º 0,94671, nosotros 0,94590. El margen de azar del público es ~±0,002.
+
 ## Próximos pasos
 
-1. Armar `train.py` y `predict.py` limpios y verificar que reproducen exactamente la última submission.
-2. Presentación.
+1. (Opcional) Probar embeddings de un modelo de lenguaje preentrenado para el texto.
+2. Armar `train.py` y `predict.py` limpios y verificar que reproducen exactamente la última submission.
+3. Presentación.
 
 ## Cómo trabajar con Ezequiel
 
