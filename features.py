@@ -8,6 +8,8 @@ import re
 
 import numpy as np
 import pandas as pd
+import scipy.sparse as sp
+from sklearn.decomposition import TruncatedSVD
 from sklearn.feature_extraction.text import TfidfVectorizer
 from sklearn.linear_model import LogisticRegression
 from sklearn.model_selection import StratifiedKFold, cross_val_predict
@@ -227,6 +229,17 @@ def prob_texto(textos_train, y_train, textos_test, caracteres=False):
     modelo.fit(textos_train, y_train)
     p_test = modelo.predict_proba(textos_test)[:, 1]
     return p_train, p_test
+
+
+def componentes_svd(todo, k=128):
+    """El TF-IDF (palabras + caracteres) del texto combinado resumido en k columnas con SVD (notebook 06).
+    Se ajusta sobre train + test: no usa la respuesta."""
+    texto = texto_combinado(todo)
+    palabras = TfidfVectorizer(ngram_range=(1, 2), min_df=2, sublinear_tf=True, dtype=np.float32).fit_transform(texto)
+    letras = TfidfVectorizer(analyzer="char_wb", ngram_range=(3, 5), min_df=5, sublinear_tf=True,
+                             max_features=200_000, dtype=np.float32).fit_transform(texto)
+    Z = TruncatedSVD(n_components=k, random_state=42).fit_transform(sp.hstack([palabras, letras]).tocsr())
+    return pd.DataFrame(Z.astype(np.float32), columns=[f"svd_{j}" for j in range(k)], index=todo.index)
 
 
 def claves_cruzadas(todo):
