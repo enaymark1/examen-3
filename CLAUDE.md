@@ -52,7 +52,8 @@ ID,condition
 | `02_vendedor_titulo.csv` | 0,9376 | 0,93809 |
 | `03_fotos_vendedor_texto.csv` | 0,9423 | 0,94457 |
 | `04_lgbm_xgb_texto_v4.csv` | 0,9433 | 0,94466 |
-| `05_encodings_cruzados.csv` | 0,9443 | **0,94590** |
+| `05_encodings_cruzados.csv` | 0,9443 | 0,94590 |
+| `06_lgbm_svd.csv` | 0,9457 | **0,94614** |
 
 ## Resultados hasta ahora
 
@@ -72,7 +73,8 @@ ID,condition
 | XGBoost solo / CatBoost solo | 0,9428 / 0,9414 |
 | Promedio LightGBM + XGBoost | 0,9429 |
 | Texto v4 (palabras + caracteres) + promedio LightGBM + XGBoost | 0,9433 (mejora en 5/5 particiones) |
-| + 3 target encodings cruzados (vendedor×tipo, vendedor×categoría, categoría×primera palabra) | **0,9443** (5/5) |
+| + 3 target encodings cruzados (vendedor×tipo, vendedor×categoría, categoría×primera palabra) | 0,9443 (5/5) |
+| Promedio LightGBM + LightGBM con SVD 128 del texto (sin XGBoost) | **0,9457** (5/5) |
 
 Probado y descartado en el 03: target encoding de la ciudad, TF-IDF de caracteres del título, modelo de texto solo de la garantía (ninguno mejora más que el ruido).
 
@@ -109,7 +111,7 @@ Probado y descartado en el 04: CatBoost (más lento, no suma al promedio), texto
 - El notebook tarda ~90 min. CatBoost deja una carpeta `catboost_info/` (está en `.gitignore`).
 - Notebooks largos: que la compu no se suspenda (apagar la pantalla no importa).
 
-## Decisiones del notebook 05 (`05_errores_encodings.ipynb`, modelo actual)
+## Decisiones del notebook 05 (`05_errores_encodings.ipynb`)
 
 - **Análisis de errores:** 35% de los errores son "seguros" (p < 0,15 o > 0,85) y muchos son ruido de etiqueta (la condición la declara el vendedor: libros "Usado" marcados nuevos, ebooks marcados usados...). Pone un techo a la accuracy.
 - **Lo único que funcionó:** 3 target encodings cruzados, `features.claves_cruzadas` → `calcular_piezas(..., caracteres=True, cruzados=True)`. Vendedor × tipo es el que más suma solo (+0,0008); los 3 juntos +0,0010–0,0013 en 5/5. Interpretación: un vendedor tiene varios "modos" (gold = mercadería del negocio, free = cosas propias usadas).
@@ -119,11 +121,19 @@ Probado y descartado en el 04: CatBoost (más lento, no suma al promedio), texto
 - El notebook tarda ~95 min. Con 7,7 GB de RAM, cerrar otros programas antes de correrlo.
 - Leaderboard público al 12/10: 1º 0,94880, 2º 0,94842, 3º 0,94733, 4º 0,94671, nosotros 0,94590. El margen de azar del público es ~±0,002.
 
+## Decisiones del notebook 06 (`06_svd_modelos_stacking.ipynb`, modelo actual; falta ejecutarlo entero)
+
+- **Modelo 06:** promedio de 2 LightGBM (`PARAMS_LGBM`): uno con las 98 columnas del 05 y otro con esas + `features.componentes_svd(todo, 128)` (TF-IDF palabras + caracteres del texto combinado → `TruncatedSVD(128, random_state=42)`, ajustado sobre train + test, reproducible). XGBoost sale. Kaggle subió solo +0,0002 (ruido del público).
+- La SVD sola mejora poco (k=128: +0,0008, 4/5); lo que suma es **promediar** el modelo con y sin SVD (+0,0014, 5/5): se equivocan en ítems distintos. Otra semilla de LightGBM no suma nada → es la SVD, no el azar. k: 16 < 32 < 64 < **128** > 256.
+- **Descartado:** fotos compartidas (casi no hay; ids anonimizados); CatBoost con seller/category/palabra1 crudos (0,9397); XGBoost con SVD; Extra Trees (0,934), Random Forest (0,938), lineal (0,924); LightGBM sin vendedor / sin texto / top 40; stacking (10 modelos + tamaño del vendedor: +0,0004, 3/5, ruido); reglas a mano (todas empeoran; "sin uso" es nuevo solo 62%).
+- Elegir en Kaggle, para el ranking privado, la 06 (mejor CV) y la 05.
+
 ## Próximos pasos
 
-1. (Opcional) Probar embeddings de un modelo de lenguaje preentrenado para el texto.
-2. Armar `train.py` y `predict.py` limpios y verificar que reproducen exactamente la última submission.
-3. Presentación.
+1. Probar SVD de texto + one-hot de vendedor/categoría (en curso) y embeddings de un modelo de lenguaje.
+2. Ejecutar el notebook 06 entero (~2 h).
+3. Armar `train.py` y `predict.py` limpios y verificar que reproducen exactamente la última submission.
+4. Presentación.
 
 ## Cómo trabajar con Ezequiel
 
