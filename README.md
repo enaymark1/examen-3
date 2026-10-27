@@ -28,6 +28,7 @@ Cada paso está en un notebook numerado, con explicaciones y resultados:
 | [`04_modelos_ensamble.ipynb`](04_modelos_ensamble.ipynb) | XGBoost y CatBoost, ensamble, análisis por tamaño del vendedor, variantes del modelo de texto | 0,9433 | 0,94466 |
 | [`05_errores_encodings.ipynb`](05_errores_encodings.ipynb) | Análisis de errores, *target encodings* cruzados (vendedor × tipo de publicación, etc.) y quince ideas que no funcionaron | 0,9443 | 0,94590 |
 | [`06_svd_modelos_stacking.ipynb`](06_svd_modelos_stacking.ipynb) | SVD del texto, más modelos (CatBoost, Random Forest, Extra Trees, lineal), stacking, reglas a mano | 0,9457 | 0,94614 |
+| [`07_embeddings_variantes.ipynb`](07_embeddings_variantes.ipynb) | Embeddings de un modelo de lenguaje preentrenado; variantes de LightGBM (`extra_trees`, DART) y CatBoost | 0,9457 | — |
 
 Los notebooks documentan **también lo que no funcionó** y por qué, para que se vea cómo se eligió cada parte del modelo.
 
@@ -64,7 +65,9 @@ Las features más importantes son la probabilidad del texto y el historial del v
 
 ```
 ├── 01_baseline.ipynb … 06_svd_modelos_stacking.ipynb   notebooks de cada etapa
-├── features.py        funciones de features compartidas (las usan los notebooks desde el 04)
+├── features.py        funciones de features compartidas (las usan los notebooks desde el 04 y los scripts)
+├── train.py           entrena el modelo final y lo guarda en modelo/ (no está en el repo: se regenera)
+├── predict.py         aplica el modelo guardado a test y genera la submission
 ├── submissions/       los CSV enviados a Kaggle, con nombres que dicen qué modelo tenían
 └── data/              los datos de Kaggle (no están en el repo, ver abajo)
 ```
@@ -78,4 +81,5 @@ Las features más importantes son la probabilidad del texto y el historial del v
    |---|---|---|---|---|---|---|---|---|
    | 3.13.2 | 2.3.4 | 1.18.0 | 3.0.1 | 1.9.0 | 4.7.0 | 3.4.1 | 1.2.10 | 3.10.7 |
 
-3. Correr los notebooks desde la carpeta del repo. Cada uno es independiente y regenera su submission en `submissions/`. Los últimos tardan entre 1,5 y 2 horas, porque cada experimento se valida en 5 particiones.
+3. Para el modelo final: `python train.py` y después `python predict.py` (desde la carpeta del repo). Reproducen exactamente el CSV enviado.
+4. Los notebooks también se pueden correr desde la carpeta del repo. Cada uno es independiente y regenera su submission en `submissions/`. Los últimos tardan entre 1,5 y 2 horas, porque cada experimento se valida en 5 particiones.

@@ -193,22 +193,27 @@ def texto_combinado(todo):
 
 # ---------- piezas que usan la respuesta ----------
 
+def tabla_target_encoding(claves, ys, prior, suavizado=10):
+    """Proporción de usados por clave, suavizada hacia `prior` (el promedio general)."""
+    t = pd.DataFrame({"k": np.asarray(claves), "y": ys}).groupby("k")["y"].agg(["sum", "count"])
+    return (t["sum"] + suavizado * prior) / (t["count"] + suavizado)
+
+
+def aplicar_target_encoding(tabla, prior, claves):
+    """Claves que no están en la tabla reciben el promedio general."""
+    return claves.map(tabla).fillna(prior).values
+
+
 def target_encoding(clave_train, y_train, clave_test, suavizado=10):
     """Proporción de usados por clave, suavizada hacia el promedio. Fuera de fold en train."""
     prior = y_train.mean()
-
-    def tabla_proporciones(claves, ys):
-        t = pd.DataFrame({"k": np.asarray(claves), "y": ys}).groupby("k")["y"].agg(["sum", "count"])
-        return (t["sum"] + suavizado * prior) / (t["count"] + suavizado)
-
     enc_train = np.full(len(clave_train), prior)
     kf = StratifiedKFold(n_splits=5, shuffle=True, random_state=42)
     for idx_a, idx_b in kf.split(clave_train, y_train):
-        tabla = tabla_proporciones(clave_train.iloc[idx_a], y_train[idx_a])
-        enc_train[idx_b] = clave_train.iloc[idx_b].map(tabla).fillna(prior).values
-    tabla = tabla_proporciones(clave_train, y_train)
-    enc_test = clave_test.map(tabla).fillna(prior).values
-    return enc_train, enc_test
+        tabla = tabla_target_encoding(clave_train.iloc[idx_a], y_train[idx_a], prior, suavizado)
+        enc_train[idx_b] = aplicar_target_encoding(tabla, prior, clave_train.iloc[idx_b])
+    tabla = tabla_target_encoding(clave_train, y_train, prior, suavizado)
+    return enc_train, aplicar_target_encoding(tabla, prior, clave_test)
 
 
 def vectorizador_texto(caracteres=False):
@@ -220,14 +225,21 @@ def vectorizador_texto(caracteres=False):
     return make_union(palabras, letras)
 
 
-def prob_texto(textos_train, y_train, textos_test, caracteres=False):
-    """Probabilidad de usado según el texto (TF-IDF + logística). Fuera de fold en train.
-    Sin n_jobs: paralelizar cambia levemente el resultado."""
-    modelo = make_pipeline(vectorizador_texto(caracteres), LogisticRegression(max_iter=3000, C=4))
+def modelo_texto(caracteres=False):
+    """TF-IDF + regresión logística: da la probabilidad de usado según el texto."""
+    return make_pipeline(vectorizador_texto(caracteres), LogisticRegression(max_iter=3000, C=4))
+
+
+def prob_texto_fuera_de_fold(textos, y, caracteres=False):
+    """Sin n_jobs: paralelizar cambia levemente el resultado."""
     kf = StratifiedKFold(n_splits=5, shuffle=True, random_state=42)
-    p_train = cross_val_predict(modelo, textos_train, y_train, cv=kf, method="predict_proba")[:, 1]
-    modelo.fit(textos_train, y_train)
-    p_test = modelo.predict_proba(textos_test)[:, 1]
+    return cross_val_predict(modelo_texto(caracteres), textos, y, cv=kf, method="predict_proba")[:, 1]
+
+
+def prob_texto(textos_train, y_train, textos_test, caracteres=False):
+    """Probabilidad de usado según el texto. Fuera de fold en train; para test, entrenado con todo train."""
+    p_train = prob_texto_fuera_de_fold(textos_train, y_train, caracteres)
+    p_test = modelo_texto(caracteres).fit(textos_train, y_train).predict_proba(textos_test)[:, 1]
     return p_train, p_test
 
 
@@ -268,6 +280,13 @@ def calcular_piezas(todo, y, idx_a, idx_b, caracteres=False, cruzados=False):
         for nombre, clave in claves_cruzadas(todo).items():
             piezas[nombre] = target_encoding(sub(clave, idx_a), y[idx_a], sub(clave, idx_b))
     return piezas
+
+
+def fijar_categorias(B, categorias):
+    """Las categóricas de B pasan a tener exactamente las categorías de entrenamiento (las nuevas quedan vacías)."""
+    for c, cats in categorias.items():
+        B[c] = pd.Categorical(B[c].where(B[c].isin(cats)), categories=cats)
+    return B
 
 
 def alinear_categorias(A, B):
