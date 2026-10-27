@@ -53,7 +53,11 @@ ID,condition
 | `03_fotos_vendedor_texto.csv` | 0,9423 | 0,94457 |
 | `04_lgbm_xgb_texto_v4.csv` | 0,9433 | 0,94466 |
 | `05_encodings_cruzados.csv` | 0,9443 | 0,94590 |
-| `06_lgbm_svd.csv` | 0,9457 | **0,94614** |
+| `06_lgbm_svd.csv` | 0,9457 | 0,94614 |
+| `07_par_nbsvm.csv` | 0,9460 | 0,94600 |
+| `08_ensamble_4_nbsvm_cat_dart.csv` | 0,9462 | **0,94671** |
+| `09_ensamble_8_boosting.csv` | 0,9460 | 0,94666 |
+| `10_ensamble_6_e5.csv` | 0,9461 | 0,94666 |
 
 ## Resultados hasta ahora
 
@@ -74,7 +78,8 @@ ID,condition
 | Promedio LightGBM + XGBoost | 0,9429 |
 | Texto v4 (palabras + caracteres) + promedio LightGBM + XGBoost | 0,9433 (mejora en 5/5 particiones) |
 | + 3 target encodings cruzados (vendedor×tipo, vendedor×categoría, categoría×primera palabra) | 0,9443 (5/5) |
-| Promedio LightGBM + LightGBM con SVD 128 del texto (sin XGBoost) | **0,9457** (5/5) |
+| Promedio LightGBM + LightGBM con SVD 128 del texto (sin XGBoost) | 0,9457 (5/5) |
+| Ensamble 08: par con NB-SVM + CatBoost SVD + LightGBM DART SVD | **0,9462** (4/5) |
 
 Probado y descartado en el 03: target encoding de la ciudad, TF-IDF de caracteres del título, modelo de texto solo de la garantía (ninguno mejora más que el ruido).
 
@@ -121,18 +126,34 @@ Probado y descartado en el 04: CatBoost (más lento, no suma al promedio), texto
 - El notebook tarda ~95 min. Con 7,7 GB de RAM, cerrar otros programas antes de correrlo.
 - Leaderboard público al 12/10: 1º 0,94880, 2º 0,94842, 3º 0,94733, 4º 0,94671, nosotros 0,94590. El margen de azar del público es ~±0,002.
 
-## Decisiones del notebook 06 (`06_svd_modelos_stacking.ipynb`, modelo actual; falta ejecutarlo entero)
+## Decisiones del notebook 06 (`06_svd_modelos_stacking.ipynb`, ejecutado)
 
 - **Modelo 06:** promedio de 2 LightGBM (`PARAMS_LGBM`): uno con las 98 columnas del 05 y otro con esas + `features.componentes_svd(todo, 128)` (TF-IDF palabras + caracteres del texto combinado → `TruncatedSVD(128, random_state=42)`, ajustado sobre train + test, reproducible). XGBoost sale. Kaggle subió solo +0,0002 (ruido del público).
 - La SVD sola mejora poco (k=128: +0,0008, 4/5); lo que suma es **promediar** el modelo con y sin SVD (+0,0014, 5/5): se equivocan en ítems distintos. Otra semilla de LightGBM no suma nada → es la SVD, no el azar. k: 16 < 32 < 64 < **128** > 256.
 - **Descartado:** fotos compartidas (casi no hay; ids anonimizados); CatBoost con seller/category/palabra1 crudos (0,9397); XGBoost con SVD; Extra Trees (0,934), Random Forest (0,938), lineal (0,924); LightGBM sin vendedor / sin texto / top 40; stacking (10 modelos + tamaño del vendedor: +0,0004, 3/5, ruido); reglas a mano (todas empeoran; "sin uso" es nuevo solo 62%).
 - Elegir en Kaggle, para el ranking privado, la 06 (mejor CV) y la 05.
 
+## Notebook 07 (`07_embeddings_variantes.ipynb`, ejecutado)
+
+- Embeddings `paraphrase-multilingual-MiniLM-L12-v2` (384 dims, sobre el texto combinado): solos 0,743; no suman al 06.
+- Variantes como 3er modelo: LightGBM `extra_trees`, DART con SVD, CatBoost con SVD: +0,0001 a +0,0003 (ruido).
+
+## Experimentos después del 07 (falta pasarlos a un notebook 08)
+
+- **NB-SVM** (binario palabras 1-2, min_df=2, log-count ratio, alfa=1, `LogisticRegression(C=0.5)`), fuera de fold, como 2ª probabilidad del texto en los dos LightGBM: par 0,9460 (+0,0003, 5/5).
+- **Embeddings e5** (`intfloat/multilingual-e5-small`, prefijo "query: ", 96 tokens): solos 0,772; `prob_emb` + vecinos por significado (10 de otros vendedores) en el LightGBM: +0,0005 (5/5) solo; en el par +0,0003. Combinados con NB-SVM no suman más.
+- Descartado: 300 palabras exactas (chi2) como columnas; pseudo-etiquetado de test (empeora: 0,9448 con umbral 0,97).
+- Submissions 07–10 generadas con scripts de scratch (falta reproducirlas en el notebook 08).
+- **Elegidas para el ranking privado (recomendación): 08 y 10.**
+- `train.py` / `predict.py` (modelo 06) verificados: reproducen exacto la 06. Hay que actualizarlos al modelo final elegido (08).
+- `features.py`: el target encoding y el modelo de texto se separaron en "ajustar" (`tabla_target_encoding`, `modelo_texto`, `prob_texto_fuera_de_fold`) y "aplicar" (`aplicar_target_encoding`), sin cambiar resultados; `fijar_categorias` para alinear test.
+- Leaderboard público al 22/10: 1º 0,95385, 2º 0,94985, 3º 0,94895.
+
 ## Próximos pasos
 
-1. Probar SVD de texto + one-hot de vendedor/categoría (en curso) y embeddings de un modelo de lenguaje.
-2. Ejecutar el notebook 06 entero (~2 h).
-3. Armar `train.py` y `predict.py` limpios y verificar que reproducen exactamente la última submission.
+1. Notebook 08: NB-SVM, embeddings e5, palabras, pseudo-etiquetado y submissions 07–10.
+2. Actualizar `train.py` / `predict.py` al modelo 08 y verificar que reproducen exacto la 08.
+3. Seguir probando ideas si queda tiempo (cierre ~mediados de noviembre).
 4. Presentación.
 
 ## Cómo trabajar con Ezequiel
