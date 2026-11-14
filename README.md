@@ -12,7 +12,7 @@ Modelo para predecir si una publicación de MercadoLibre es de un producto **nue
 | Modelo | Accuracy en validación cruzada | Kaggle (público) |
 |---|---|---|
 | Baseline: LightGBM por defecto, 16 features | 0,8417 | 0,83814 |
-| **Modelo final (06)** | **0,9457** | **0,94614** |
+| **Modelo final (ensamble 08)** | **0,9462** | **0,94671** |
 
 La validación cruzada (5 particiones) anticipó bien el resultado de Kaggle en todas las submissions, así que las decisiones se tomaron con ella y no con el leaderboard público.
 
@@ -29,23 +29,33 @@ Cada paso está en un notebook numerado, con explicaciones y resultados:
 | [`05_errores_encodings.ipynb`](05_errores_encodings.ipynb) | Análisis de errores, *target encodings* cruzados (vendedor × tipo de publicación, etc.) y quince ideas que no funcionaron | 0,9443 | 0,94590 |
 | [`06_svd_modelos_stacking.ipynb`](06_svd_modelos_stacking.ipynb) | SVD del texto, más modelos (CatBoost, Random Forest, Extra Trees, lineal), stacking, reglas a mano | 0,9457 | 0,94614 |
 | [`07_embeddings_variantes.ipynb`](07_embeddings_variantes.ipynb) | Embeddings de un modelo de lenguaje preentrenado; variantes de LightGBM (`extra_trees`, DART) y CatBoost | 0,9457 | — |
+| [`08_nbsvm_e5_ensambles.ipynb`](08_nbsvm_e5_ensambles.ipynb) | NB-SVM (segunda probabilidad del texto), ensambles con CatBoost, DART, XGBoost y `extra_trees`, embeddings e5, pseudo-etiquetado, pesos *greedy*; submissions 07 a 11 | 0,9462 | 0,94671 |
 
 Los notebooks documentan **también lo que no funcionó** y por qué, para que se vea cómo se eligió cada parte del modelo.
 
 ## Modelo final
 
-**Promedio de dos LightGBM** (1.500 árboles, `learning_rate=0.02`, `num_leaves=63`, `colsample_bytree=0.5`) que ven el texto de dos formas distintas:
+**Promedio simple de cuatro modelos de boosting** (ensamble 08). Todos parten de las mismas **98 columnas**:
 
-1. **LightGBM A**, con 98 columnas:
-   - **92 features** que no usan la respuesta: precio, cantidades, tipo de publicación, envío, medios de pago, tags, fechas, palabras clave del título y la garantía, tamaño y antigüedad de las fotos, y el perfil de cómo publica cada vendedor.
-   - **6 features que sí usan la respuesta**, siempre calculadas fuera de fold:
-     - *target encoding* de vendedor, categoría, vendedor × categoría, vendedor × tipo de publicación y categoría × primera palabra del título;
-     - probabilidad de usado según el texto (TF-IDF de palabras y caracteres + regresión logística).
-2. **LightGBM B**, con las mismas 98 columnas **más 128 columnas de SVD**: el TF-IDF del texto resumido en sus 128 patrones principales.
+- **92 features** que no usan la respuesta: precio, cantidades, tipo de publicación, envío, medios de pago, tags, fechas, palabras clave del título y la garantía, tamaño y antigüedad de las fotos, y el perfil de cómo publica cada vendedor.
+- **6 features que sí usan la respuesta**, siempre calculadas fuera de fold:
+  - *target encoding* de vendedor, categoría, vendedor × categoría, vendedor × tipo de publicación y categoría × primera palabra del título;
+  - probabilidad de usado según el texto (TF-IDF de palabras y caracteres + regresión logística).
 
-Se predice "usado" si el promedio de las dos probabilidades es mayor a 0,5.
+Sobre esa base, cada modelo ve el texto de otra forma:
 
-Cada uno solo da casi lo mismo, pero **se equivocan en publicaciones distintas**, así que el promedio mejora en las 5 particiones de la validación.
+| Modelo | Columnas extra | Hiperparámetros |
+|---|---|---|
+| **LightGBM A** | probabilidad NB-SVM del texto | 1.500 árboles, `learning_rate=0.02`, `num_leaves=63`, `colsample_bytree=0.5` |
+| **LightGBM B** | NB-SVM + 128 columnas de SVD (el TF-IDF del texto resumido en sus 128 patrones principales) | los mismos |
+| **CatBoost** | 128 columnas de SVD | 2.000 iteraciones, `learning_rate=0.06`, `depth=7` |
+| **LightGBM DART** | 128 columnas de SVD | 800 árboles, `learning_rate=0.08`, `drop_rate=0.1` |
+
+**NB-SVM** es una segunda probabilidad del texto: cada palabra se pondera por su "razón de usados" (cuánto más aparece en usados que en nuevos) y sobre eso se ajusta una regresión logística. También se calcula fuera de fold.
+
+Se predice "usado" si el promedio de las cuatro probabilidades es mayor a 0,5.
+
+Cada modelo solo da casi lo mismo, pero **se equivocan en publicaciones distintas**, así que el promedio mejora. Con más modelos (8 o 10, incluyendo XGBoost y embeddings de un modelo de lenguaje) la validación ya no mejora, así que se eligió el de 4.
 
 Las features más importantes son la probabilidad del texto y el historial del vendedor.
 
@@ -64,7 +74,7 @@ Las features más importantes son la probabilidad del texto y el historial del v
 ## Estructura del repositorio
 
 ```
-├── 01_baseline.ipynb … 06_svd_modelos_stacking.ipynb   notebooks de cada etapa
+├── 01_baseline.ipynb … 08_nbsvm_e5_ensambles.ipynb   notebooks de cada etapa
 ├── features.py        funciones de features compartidas (las usan los notebooks desde el 04 y los scripts)
 ├── train.py           entrena el modelo final y lo guarda en modelo/ (no está en el repo: se regenera)
 ├── predict.py         aplica el modelo guardado a test y genera la submission
@@ -81,5 +91,7 @@ Las features más importantes son la probabilidad del texto y el historial del v
    |---|---|---|---|---|---|---|---|---|
    | 3.13.2 | 2.3.4 | 1.18.0 | 3.0.1 | 1.9.0 | 4.7.0 | 3.4.1 | 1.2.10 | 3.10.7 |
 
-3. Para el modelo final: `python train.py` y después `python predict.py` (desde la carpeta del repo). Reproducen exactamente el CSV enviado.
-4. Los notebooks también se pueden correr desde la carpeta del repo. Cada uno es independiente y regenera su submission en `submissions/`. Los últimos tardan entre 1,5 y 2 horas, porque cada experimento se valida en 5 particiones.
+   Los notebooks 07 y 08 usan además `torch` 2.14.1 (CPU) y `sentence-transformers` 6.2.0 para los embeddings. El modelo final no los necesita.
+
+3. Para el modelo final: `python train.py` (~1 hora) y después `python predict.py` (~10 minutos), desde la carpeta del repo. Regeneran exactamente `submissions/08_ensamble_4_nbsvm_cat_dart.csv`.
+4. Los notebooks también se pueden correr desde la carpeta del repo. Cada uno es independiente y regenera sus submissions en `submissions/`. Los últimos tardan entre 1,5 y 5 horas, porque cada experimento se valida en 5 particiones.

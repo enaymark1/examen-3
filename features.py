@@ -1,6 +1,6 @@
 """Features del modelo, en un solo lugar.
 
-Es el código de los notebooks 02 y 03, sin cambios en la lógica. Lo usan los
+Es el código de los notebooks 02 a 08, sin cambios en la lógica. Lo usan los
 notebooks desde el 04 y los scripts finales (train.py / predict.py), así lo que
 se valida es exactamente lo que se entrega.
 """
@@ -10,7 +10,7 @@ import numpy as np
 import pandas as pd
 import scipy.sparse as sp
 from sklearn.decomposition import TruncatedSVD
-from sklearn.feature_extraction.text import TfidfVectorizer
+from sklearn.feature_extraction.text import CountVectorizer, TfidfVectorizer
 from sklearn.linear_model import LogisticRegression
 from sklearn.model_selection import StratifiedKFold, cross_val_predict
 from sklearn.pipeline import make_pipeline, make_union
@@ -252,6 +252,50 @@ def componentes_svd(todo, k=128):
                              max_features=200_000, dtype=np.float32).fit_transform(texto)
     Z = TruncatedSVD(n_components=k, random_state=42).fit_transform(sp.hstack([palabras, letras]).tocsr())
     return pd.DataFrame(Z.astype(np.float32), columns=[f"svd_{j}" for j in range(k)], index=todo.index)
+
+
+# ---------- 08: NB-SVM, una segunda probabilidad del texto ----------
+
+def matriz_palabras(todo):
+    """Qué palabras y pares de palabras tiene cada texto combinado (1 = está, 0 = no), para NB-SVM.
+    El vocabulario se arma sobre train + test: no usa la respuesta."""
+    vect = CountVectorizer(ngram_range=(1, 2), min_df=2, binary=True, dtype=np.float32)
+    return vect.fit_transform(texto_combinado(todo)).tocsr()
+
+
+def ajustar_nbsvm(M, y, C=0.5, alfa=1.0):
+    """NB-SVM: cada palabra se multiplica por su "razón de usados" r = log(frecuencia en usados / frecuencia en nuevos)
+    y sobre eso se ajusta una regresión logística. alfa suaviza las palabras raras."""
+    pos = alfa + np.asarray(M[y == 1].sum(0)).ravel()
+    neg = alfa + np.asarray(M[y == 0].sum(0)).ravel()
+    r = np.log((pos / pos.sum()) / (neg / neg.sum())).astype(np.float32)
+    return r, LogisticRegression(C=C, max_iter=3000).fit(M.multiply(r).tocsr(), y)
+
+
+def aplicar_nbsvm(modelo, M):
+    r, logistica = modelo
+    return logistica.predict_proba(M.multiply(r).tocsr())[:, 1]
+
+
+def prob_nbsvm_fuera_de_fold(M, y):
+    p = np.zeros(M.shape[0])
+    for a, b in StratifiedKFold(n_splits=5, shuffle=True, random_state=42).split(np.zeros(len(y)), y):
+        p[b] = aplicar_nbsvm(ajustar_nbsvm(M[a], y[a]), M[b])
+    return p
+
+
+def prob_nbsvm(M, y, idx_a, idx_b):
+    """Probabilidad NB-SVM: fuera de fold para las filas idx_a; para idx_b, ajustado con todas las de idx_a."""
+    Ma, ya = M[idx_a], y[idx_a]
+    return prob_nbsvm_fuera_de_fold(Ma, ya), aplicar_nbsvm(ajustar_nbsvm(Ma, ya), M[idx_b])
+
+
+def preparar_catboost(A):
+    """CatBoost quiere las categóricas como texto, sin vacíos."""
+    A = A.copy()
+    for c in CAT:
+        A[c] = A[c].astype(object).fillna("NA").astype(str)
+    return A
 
 
 def claves_cruzadas(todo):
