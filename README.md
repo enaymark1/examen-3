@@ -11,7 +11,7 @@ Modelo para predecir si una publicación de MercadoLibre es de un producto **nue
 
 | Consigna | Archivo |
 |---|---|
-| a. Presentación | *(pendiente)* |
+| a. Presentación | [`presentacion/presentacion.pdf`](presentacion/presentacion.pdf) |
 | b. Entrena y guarda el modelo final | [`train.py`](train.py) → guarda `modelo/modelo_final.pkl` |
 | c. Aplica el modelo a test y reproduce el archivo enviado | [`predict.py`](predict.py) → genera [`submissions/08_ensamble_4_nbsvm_cat_dart.csv`](submissions/08_ensamble_4_nbsvm_cat_dart.csv) |
 
