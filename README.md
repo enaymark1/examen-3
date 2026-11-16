@@ -7,6 +7,18 @@ Modelo para predecir si una publicación de MercadoLibre es de un producto **nue
 - **Datos:** 70.000 publicaciones de entrenamiento (con la respuesta) y 30.000 de test (sin ella), en JSON anidado.
 - **Autor:** Ezequiel Naymark
 
+## Entrega
+
+| Consigna | Archivo |
+|---|---|
+| a. Presentación | *(pendiente)* |
+| b. Entrena y guarda el modelo final | [`train.py`](train.py) → guarda `modelo/modelo_final.pkl` |
+| c. Aplica el modelo a test y reproduce el archivo enviado | [`predict.py`](predict.py) → genera [`submissions/08_ensamble_4_nbsvm_cat_dart.csv`](submissions/08_ensamble_4_nbsvm_cat_dart.csv) |
+
+Los dos scripts importan las funciones de features de [`features.py`](features.py). Para correrlos, ver [Cómo reproducir](#cómo-reproducir).
+
+Los notebooks `01` a `08` no son parte de la entrega obligatoria: documentan el desarrollo (qué se probó, qué funcionó y qué no) y respaldan las decisiones del modelo final.
+
 ## Resultado
 
 | Modelo | Accuracy en validación cruzada | Kaggle (público) |
